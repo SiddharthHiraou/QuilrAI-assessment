@@ -1,0 +1,16 @@
+# TOLLGATE_POLICY=examples/policy.toml
+#
+# Rules are checked in order and the first match wins. Patterns are shell-style
+# globs, matched case-insensitively. A tool no rule matches falls through to
+# default_roles. An unknown role matches nothing.
+
+default_roles = ["admin", "support", "viewer"]
+
+[[rule]]
+match = "admin_*"
+roles = ["admin"]
+
+# Money movement: support and admins only, never a read-only viewer.
+[[rule]]
+match = "trigger_refund"
+roles = ["admin", "support"]
