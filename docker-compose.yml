@@ -1,0 +1,64 @@
+# docker compose up --build
+#
+#   :8800  MCP gateway   -> billing MCP server (internal only)
+#   :8830  LLM gateway   -> primary / secondary mock providers (internal only)
+#
+# Only the two gateways publish ports. The billing server and the providers
+# sit on the internal network, so the gateways are the only way in.
+
+x-image: &image
+  build: .
+  restart: unless-stopped
+
+services:
+  billing:
+    <<: *image
+    command: ["python", "-m", "tollgate.mcp_server", "--http", "8801", "--host", "0.0.0.0", "--admin-tools"]
+    networks: [internal]
+
+  mcp-gateway:
+    <<: *image
+    command: ["python", "-m", "tollgate.mcp_gateway", "--host", "0.0.0.0", "--port", "8800"]
+    environment:
+      TOLLGATE_DOWNSTREAM_URL: http://billing:8801/mcp
+      TOLLGATE_JWT_SECRET: ${TOLLGATE_JWT_SECRET:-dev-only-secret-change-me-0123456789abcdef}
+      TOLLGATE_TOOL_PINS: ${TOLLGATE_TOOL_PINS:-warn}
+      TOLLGATE_REDACT_ROLES: viewer
+    ports: ["8800:8800"]
+    depends_on: [billing]
+    networks: [internal, edge]
+
+  provider-primary:
+    <<: *image
+    command: ["python", "-m", "tollgate.mock_llm", "--name", "primary", "--port", "8831", "--host", "0.0.0.0"]
+    networks: [internal]
+
+  provider-secondary:
+    <<: *image
+    command: ["python", "-m", "tollgate.mock_llm", "--name", "secondary", "--port", "8832", "--host", "0.0.0.0"]
+    networks: [internal]
+
+  llm-gateway:
+    <<: *image
+    command: ["python", "-m", "tollgate.llm_gateway", "--host", "0.0.0.0", "--port", "8830"]
+    environment:
+      TOLLGATE_PRIMARY_BASE_URL: ${TOLLGATE_PRIMARY_BASE_URL:-http://provider-primary:8831/v1}
+      TOLLGATE_PRIMARY_API_KEY: ${TOLLGATE_PRIMARY_API_KEY:-}
+      TOLLGATE_PRIMARY_MODEL: ${TOLLGATE_PRIMARY_MODEL:-}
+      TOLLGATE_SECONDARY_BASE_URL: ${TOLLGATE_SECONDARY_BASE_URL:-http://provider-secondary:8832/v1}
+      TOLLGATE_SECONDARY_API_KEY: ${TOLLGATE_SECONDARY_API_KEY:-}
+      TOLLGATE_SECONDARY_MODEL: ${TOLLGATE_SECONDARY_MODEL:-}
+      TOLLGATE_TENANT_KEYS: ${TOLLGATE_TENANT_KEYS:-tg-dev-acme:acme,tg-dev-globex:globex}
+      TOLLGATE_DB: /data/ratelimit.sqlite3
+    volumes: [ratelimit:/data]
+    ports: ["8830:8830"]
+    depends_on: [provider-primary, provider-secondary]
+    networks: [internal, edge]
+
+volumes:
+  ratelimit:
+
+networks:
+  internal:
+    internal: true
+  edge:
