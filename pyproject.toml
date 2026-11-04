@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tollgate"
+version = "0.1.0"
+description = "MCP server, MCP security gateway, and an LLM gateway with streaming PII redaction and model failover."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Siddharth Hiraou" }]
+dependencies = [
+    "mcp==2.3.0",
+    "pydantic>=2.12,<3",
+    "starlette>=0.48",
+    "uvicorn>=0.31",
+    "httpx2>=2.10",
+    "pyjwt>=2.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+tollgate = "tollgate.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = ["slow: needs real sockets or subprocesses"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# Blocking file reads in async tests are fine; nothing else is running.
+"tests/*" = ["ASYNC"]
