@@ -17,7 +17,7 @@ help:
 install: .venv  ## set up the venv
 
 .PHONY: test
-test: install  ## run all 284 tests (~40s)
+test: install  ## run all 286 tests (~40s)
 	$(PY) -m pytest
 
 .PHONY: test-fast

@@ -9,6 +9,7 @@ answer has still reset the key.
 import json
 import time
 
+import anyio
 import httpx2
 import jwt
 import mcp_types as types
@@ -411,3 +412,40 @@ async def test_optional_tools_list_filtering(downstream):
             admin_names = [t.name for t in (await c.list_tools()).tools]
     assert names == ["get_customer_record", "trigger_refund"]
     assert "admin_reset_key" in admin_names
+
+
+# --- streaming relay -------------------------------------------------------------------------
+
+def slow_server():
+    async def list_tools(ctx, params):
+        return types.ListToolsResult(tools=[types.Tool(name="slow_export", input_schema={"type": "object"})])
+
+    async def call_tool(ctx, params):
+        token = (ctx.meta or {}).get("progress_token")
+        for i in range(3):
+            await anyio.sleep(0.4)
+            if token is not None:
+                await ctx.session.send_progress_notification(token, i + 1, 3, related_request_id=ctx.request_id)
+        return types.CallToolResult(content=[types.TextContent(type="text", text="exported")])
+
+    return Server("slow", on_list_tools=list_tools, on_call_tool=call_tool).streamable_http_app()
+
+
+@pytest.mark.parametrize("mode", ["auto", "legacy"])
+async def test_progress_notifications_arrive_as_they_happen(mode):
+    # If the gateway waited for the whole SSE reply, all three would land at
+    # ~1.2s together with the result.
+    with serving(slow_server()) as down, serving(create_app(Gateway(down + "/mcp"))) as gw:
+        seen = []
+        async with client(gw + "/mcp", "viewer", mode) as c:
+            started = time.monotonic()
+
+            async def on_progress(progress, total, message):
+                seen.append(time.monotonic() - started)
+
+            result = await c.call_tool("slow_export", {}, progress_callback=on_progress)
+            finished = time.monotonic() - started
+    assert result.content[0].text == "exported"
+    assert len(seen) == 3
+    assert seen[0] < 0.7 and seen[1] < 1.1
+    assert finished >= 1.2

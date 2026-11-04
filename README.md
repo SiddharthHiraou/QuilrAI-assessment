@@ -28,7 +28,7 @@ redactor over tool results. The LLM gateway is task 3's guardrail sitting on top
 
 ```bash
 make install     # venv + deps (Python 3.11 or newer)
-make test        # 284 tests, about 40s, no network, no API keys
+make test        # 286 tests, about 40s, no network, no API keys
 make demo        # every task end to end, narrated, about 12s
 ```
 
@@ -152,9 +152,10 @@ make run-gateway   # billing server on :8801, gateway on :8800
 
 **It's a real Streamable HTTP proxy.** Sessions, SSE replies, the GET stream and DELETE all
 pass through, as do the 2026-07-28 stateless requests. SSE replies are relayed event by
-event, so a long-running tool's progress notifications reach the client as they happen.
-Every test drives it with the official SDK client against the official SDK server; nothing
-is a hand-rolled mock.
+event, so a long-running tool's progress notifications reach the client as they happen
+(there's a timing test for that). The downstream in every gateway test is the SDK's own
+server, and the protocol-level tests use the SDK's own client, so nothing here is checked
+against a mock I wrote myself.
 
 **Authentication failures are HTTP 401, authorization failures are JSON-RPC `-32001`.**
 401 with `WWW-Authenticate` is what MCP clients and OAuth libraries already know how to
@@ -408,6 +409,6 @@ src/tollgate/
   llm_gateway/    tasks 3 + 4 wired into one OpenAI-compatible endpoint
   mock_llm/       fake provider with failure modes: rate_limit, error, slow, stall, reject
   sse.py, log.py  shared; every service logs JSON lines to stderr, never stdout
-tests/            284 tests, mostly over real sockets
+tests/            286 tests, mostly over real sockets
 scripts/          demo.py, bench.py
 ```
